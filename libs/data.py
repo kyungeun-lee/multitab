@@ -47,18 +47,17 @@ def load_data(openml_id):
     n_samples = X.shape[0]
     n_cols = X.shape[1]
     print(nan_counts / cell_counts)
-    ### NaN 처리
-    #1. column -- 50% 이상이 nan인 경우 column 탈락
+    ### Preprocess NaN (Section 3.2)
+    # 1. Remove columns containing more than 50% NaN values
     nan_cols = X.isna().sum(0)
     valid_cols = nan_cols.loc[nan_cols < (0.5*len(X))].index.tolist()
     X = X[valid_cols]
-    print("DEL COL", X.shape, n_cols - len(valid_cols))
-    #2. remained nans -> delete rows
+    # 2. Exclude samples containing any NaN values in either inputs or labels
     nan_idx = X.isna().any(axis=1)
     X = X[~nan_idx].reset_index(drop=True)
     y = y[~nan_idx].reset_index(drop=True)
-    print("DEL ROW", X.shape, "%.3f" %(nan_idx.sum() / n_samples))
     
+    # 3. Define categorical features
     for col in X.select_dtypes(exclude=['float', 'int']).columns:
         colencoder = LabelEncoder()
         X[col] = colencoder.fit_transform(X[col])
@@ -107,12 +106,14 @@ def cat_num_features(X_train, cat_threshold=20):
         X_num = np.array([int(i) for i in range(num_features) if not i in X_cat])
     return (X_cat, counts[X_cat], X_num)
 
+# Numerical feature preprocessing: Standardization
 def standardization(X, X_mean, X_std, y, y_mean=0, y_std=1, num_indices=[], tasktype='multiclass'):
     X[:, num_indices] = (X[:, num_indices] - X_mean[num_indices]) / (X_std[num_indices] + 1e-10)
     if tasktype == "regression":
         y = (y - y_mean) / (y_std + 1e-10)
     return (X, y)
 
+# Numerical feature preprocessing: Quantile transform
 def quant(X_train, X_val, X_test, y_train, y_val, y_test, y_mean=0, y_std=1, num_indices=[], tasktype='multiclass'):
     device = X_train.get_device()
     quantile_transformer = QuantileTransformer(output_distribution='uniform', random_state=42)
@@ -125,18 +126,10 @@ def quant(X_train, X_val, X_test, y_train, y_val, y_test, y_mean=0, y_std=1, num
         y_test = (y_test - y_mean) / (y_std + 1e-10)
     return (X_train, y_train), (X_val, y_val), (X_test, y_test)
 
-def orderedTS(X_train, X_val, X_test, y_train, y_val, y_test, X_cat):
-    device = X_train.get_device()
-#     for c in X_cat:
-#         dt = pd.DataFrame({
-#             'x': X_train[]
-#         })
-    
-    return (X_train, X_val, X_test)
 
 class TabularDataset(torch.utils.data.Dataset):
     def __init__(self, openml_id, tasktype, device, labeled_data=1,
-                 cat_threshold=1e+10, seed=123456, modelname="xgboost", cat_ordered=False, normalize=True, quantile=False): #cat_ordered: todo
+                 cat_threshold=1e+10, seed=123456, modelname="xgboost", cat_ordered=False, normalize=True, quantile=False):
         X, y = load_data(openml_id)
             
         self.tasktype = tasktype
@@ -153,44 +146,12 @@ class TabularDataset(torch.utils.data.Dataset):
                 self.X_test[:, cat_dim] = torch.tensor([mapping[v.item()] for v in self.X_test[:, cat_dim]])
         print("input dim: %i, cat: %i, num: %i" %(self.X_train.size(1), len(self.X_cat), len(self.X_num)))
         
-        ### get small data here
-        if labeled_data < 1:
-            if tasktype in ['binclass', 'multiclass']:
-                unique_classes, full_indices, n_min_samples = self.y_train.unique(dim=0, return_inverse=True, return_counts=True)
-                num_classes = len(unique_classes)
-                n_data = len(self.X_train)
-
-                n_subsamples = int(n_data * labeled_data)
-                n_samples_per_class = [n_subsamples // num_classes] * num_classes
-                if n_subsamples % num_classes > 0:
-                    n_samples_per_class[-1] += n_subsamples % num_classes
-                
-                assert n_min_samples.min() > max(n_samples_per_class), "check the class imbalance!"
-
-                indices = []
-                for i, class_idx in enumerate(unique_classes):
-                    class_indices = torch.where(full_indices == i)[0]
-                    indices.append(class_indices[torch.randperm(len(class_indices))][:n_samples_per_class[i]])
-                subsample_indices = torch.cat(indices)
-            else:
-                n_data = len(self.X_train)
-                n_subsamples = int(n_data * labeled_data)
-                subsample_indices = torch.randperm(len(n_data))[:n_subsamples]
-            
-            unlabeled_indices = [i for i in range(n_data) if not i in subsample_indices]
-            self.y_train[unlabeled_indices] = torch.nan        
-        
         self.batch_size = get_batch_size(len(self.X_train))
         self.X_mean = self.X_train.mean(0)
         self.X_std = self.X_train.std(0)
         self.y_mean = self.y_train.type(torch.float).mean(0)
         self.y_std = self.y_train.type(torch.float).std(0)
-        
-#         X_train_ranks = []
-#         for d in range(self.X_train.size(1)):
-#             X_train_ranks.append(self._rank_index(self.X_train[:, d]))
-#         self.X_train_ranks = torch.tensor(X_train_ranks).T
-        
+                
         if quantile & (len(self.X_num) > 0) & normalize:
             (self.X_train, self.y_train), (self.X_val, self.y_val), (self.X_test, self.y_test) = quant(
                 self.X_train, self.X_val, self.X_test,
@@ -200,10 +161,7 @@ class TabularDataset(torch.utils.data.Dataset):
             (self.X_train, self.y_train) = standardization(self.X_train, self.X_mean, self.X_std, self.y_train, self.y_mean, self.y_std, num_indices=self.X_num, tasktype=self.tasktype)
             (self.X_val, self.y_val) = standardization(self.X_val, self.X_mean, self.X_std, self.y_val, self.y_mean, self.y_std, num_indices=self.X_num, tasktype=self.tasktype)
             (self.X_test, self.y_test) = standardization(self.X_test, self.X_mean, self.X_std, self.y_test, self.y_mean, self.y_std, num_indices=self.X_num, tasktype=self.tasktype)
-        
-    def _rank_index(self, vector):
-        return (scipy.stats.rankdata(vector.cpu(), 'min') - 1).astype(int)
-    
+            
     def __len__(self, data):
         if data == "train":
             return len(self.X_train)

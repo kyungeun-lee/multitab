@@ -2,8 +2,6 @@ from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, mean_square
 import torch, optuna, os
 import numpy as np
 
-### todotodo : add r2 for regression
-
 def calculate_accuracy(y_true, y_pred):
     return accuracy_score(y_true, y_pred)
 
