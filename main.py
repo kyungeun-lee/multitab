@@ -15,9 +15,9 @@ parser = argparse.ArgumentParser()
 
 # Add arguments to the parser for GPU ID, OpenML dataset ID, code directory, model name, preprocessing method, and categorical feature threshold
 parser.add_argument("--gpu_id", type=int, default=4, help="gpu index")
-parser.add_argument("--openml_id", type=int, default=40672, help="dataset index (See dataset_id.json for detailed information)")
+parser.add_argument("--openml_id", type=int, default=4538, help="dataset index (See dataset_id.json for detailed information)")
 parser.add_argument("--where_is_your_code", type=str, default="/home/multitab")
-parser.add_argument("--modelname", type=str, default='xgboost', 
+parser.add_argument("--modelname", type=str, default='catboost', 
                     choices=['xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer'])
 parser.add_argument("--preprocessing", type=str, default="quantile", 
                     choices=['standardization', 'quantile'], help="numerical feature preprocessing method")
@@ -73,7 +73,7 @@ if train:
     
     # Define optimization trials
     def objective(trial):
-        print("### Start(TZ=Seoul): ", (trial.datetime_start + datetime.timedelta(hours=9)).strftime("%m/%d %H:%M:%S"))
+        print("### Start: ", trial.datetime_start.strftime("%m/%d %H:%M:%S"))
         params = get_search_space(trial, args.modelname)    
         
         model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id)
