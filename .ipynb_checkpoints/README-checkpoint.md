@@ -4,8 +4,8 @@ The implementation codes of the paper "MultiTab: A Comprehensive Benchmark Suite
 
 ## Table of Contents
 - [Overview](#overview)
-- [Required libraries](#required libraries)
-- [Dataset descriptions](#dataset descriptions)
+- [Required libraries](#required-libraries)
+- [Dataset descriptions](#dataset-descriptions)
 - [Experiments](#experiments)
 - [Examples](#examples)
 - [License](#license)
