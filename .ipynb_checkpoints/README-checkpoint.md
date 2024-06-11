@@ -1,6 +1,6 @@
 # MultiTab
 The implementation codes of the paper "MultiTab: A Comprehensive Benchmark Suite for Multi-Dimensional Analysis in Tabular Domains"
-(Paper url: TBU)
+(Paper URL: TBU)
 
 ## Table of Contents
 - [Overview](#overview)
