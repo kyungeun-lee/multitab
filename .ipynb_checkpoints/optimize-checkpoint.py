@@ -1,3 +1,8 @@
+
+## Main file for optimizing each model for a specific [dataset, preprocessing method] setup.
+## Paper info: MultiTab: A Comprehensive Benchmark Suite with Multi-Dimensional Analysis in Tabular Domains
+## Contact author: Kyungeun Lee (kyungeun.lee@lgresearch.ai)
+
 import optuna, argparse, os, torch, json, joblib, datetime
 from libs.data import TabularDataset
 from libs.eval import *
@@ -8,7 +13,7 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
 # Define the path to save the results
-savepath = "results"
+savepath = "results/optim_logs"
 
 # Initialize argument parser
 parser = argparse.ArgumentParser()
@@ -36,13 +41,12 @@ with open(f'{args.where_is_your_code}/dataset_id.json', 'r') as file:
 tasktype = data_info.get(str(args.openml_id))['tasktype']
 
 # Define directory for saving logs and create it if it does not exist
-savepath = os.path.join(savepath, f'data={args.openml_id}/model={args.modelname}/cat_threshold={args.cat_threshold}')
 if not os.path.exists(savepath):
     os.makedirs(savepath)
+fname = os.path.join(savepath, f'data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
     
 # Prevent duplicated running by checking if the logs exist
 train = True
-fname = os.path.join(savepath, 'result.pkl')
 print(fname)
 if os.path.exists(fname):
     done_result = joblib.load(fname)
@@ -114,8 +118,8 @@ if train:
     print("#############################################")
     print(env_info)
     print(study.best_trial.user_attrs)
-    joblib.dump(study, os.path.join(savepath, 'result.pkl'))
-    print(os.path.join(savepath, 'result.pkl'))
+    joblib.dump(study, fname)
+    print(fname)
     print("#############################################")
     
 #     save_fig(study, savepath) ### only for convenience

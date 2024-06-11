@@ -128,8 +128,8 @@ def quant(X_train, X_val, X_test, y_train, y_val, y_test, y_mean=0, y_std=1, num
 
 
 class TabularDataset(torch.utils.data.Dataset):
-    def __init__(self, openml_id, tasktype, device, labeled_data=1,
-                 cat_threshold=1e+10, seed=123456, modelname="xgboost", cat_ordered=False, normalize=True, quantile=False):
+    def __init__(self, openml_id, tasktype, device, 
+                 cat_threshold=1e+10, seed=123456, modelname="xgboost", normalize=True, quantile=False):
         X, y = load_data(openml_id)
             
         self.tasktype = tasktype

@@ -30,3 +30,18 @@ def getmodel(modelname, params, tasktype, dataset, openml_id):
         model = T2GFormer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=X_train.size(1), output_dim=1, device=device, data_id=openml_id)
         
     return model
+
+
+def add_default_params(modelname, params):
+    if modelname in ["mlp", "resnet"]:
+        params['n_epochs'] = 100
+    elif modelname in ["ftt", "t2gformer"]:
+        params["n_heads"] = 8
+        params["kv_compression"] = None
+        params["kv_compression_sharing"] = None
+        params["n_epochs"] = 100
+    if modelname == "t2gformer":
+        params["token_bias"] = True
+    if modelname == "ftt":
+        params["ffn_dropout"] = params["attention_dropout"]
+    return params
