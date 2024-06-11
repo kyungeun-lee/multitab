@@ -12,21 +12,18 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
-# Define the path to save the results
-savepath = "results/optim_logs"
-
 # Initialize argument parser
 parser = argparse.ArgumentParser()
 
 # Add arguments to the parser for GPU ID, OpenML dataset ID, code directory, model name, preprocessing method, and categorical feature threshold
 parser.add_argument("--gpu_id", type=int, default=4, help="gpu index")
 parser.add_argument("--openml_id", type=int, default=4538, help="dataset index (See dataset_id.json for detailed information)")
-parser.add_argument("--where_is_your_code", type=str, default="/home/multitab")
 parser.add_argument("--modelname", type=str, default='catboost', 
                     choices=['xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer'])
 parser.add_argument("--preprocessing", type=str, default="quantile", 
                     choices=['standardization', 'quantile'], help="numerical feature preprocessing method")
 parser.add_argument("--cat_threshold", type=int, default=20, help="categorical feature definition")
+parser.add_argument("--savepath", type=str, default="results/optim_logs", help="path to save the results")
 
 # Parse the arguments
 args = parser.parse_args()
@@ -36,14 +33,14 @@ if args.modelname in ['xgboost', 'mlp']:
     assert args.cat_threshold == 0
  
 # Load dataset information from a JSON file
-with open(f'{args.where_is_your_code}/dataset_id.json', 'r') as file:
+with open(f'dataset_id.json', 'r') as file:
     data_info = json.load(file)
 tasktype = data_info.get(str(args.openml_id))['tasktype']
 
 # Define directory for saving logs and create it if it does not exist
-if not os.path.exists(savepath):
-    os.makedirs(savepath)
-fname = os.path.join(savepath, f'data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
+if not os.path.exists(args.savepath):
+    os.makedirs(args.savepath)
+fname = os.path.join(args.savepath, f'data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
     
 # Prevent duplicated running by checking if the logs exist
 train = True
@@ -97,7 +94,7 @@ if train:
         for k, v in test_metrics.items():
             trial.set_user_attr(k, v)
         
-        print(device, env_info, args.openml_id, data_info.get(str(args.openml_id))['name'], args.modelname, savepath)
+        print(device, env_info, args.openml_id, data_info.get(str(args.openml_id))['name'], args.modelname, args.savepath)
         print(val_metrics)
         print(test_metrics)
         now = datetime.datetime.now()

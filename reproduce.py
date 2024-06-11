@@ -13,22 +13,19 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
-# Define the path to load the configuration and save the results
-savepath = "results"
-
 # Initialize argument parser
 parser = argparse.ArgumentParser()
 
 # Add arguments to the parser for GPU ID, OpenML dataset ID, code directory, model name, preprocessing method, and categorical feature threshold
 parser.add_argument("--gpu_id", type=int, default=5)
 parser.add_argument("--openml_id", type=int, default=4538)
-parser.add_argument("--where_is_your_code", type=str, default="/home/multitab")
 
 parser.add_argument("--modelname", type=str, default='xgboost', choices=['xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer'])
 parser.add_argument("--preprocessing", type=str, default="quantile", 
                     choices=['standardization', 'quantile'], help="numerical feature preprocessing method")
 parser.add_argument("--cat_threshold", type=int, default=0, help="categorical feature definition")
 parser.add_argument("--ensemble", type=int, default=0, help="ensemble trial") # optional argument for allowing the repeated reproduction
+parser.add_argument("--savepath", type=str, default="results", help="path to save the results")
 
 # Parse the arguments
 args = parser.parse_args()
@@ -38,12 +35,12 @@ if args.modelname in ['xgboost', 'mlp']:
     assert args.cat_threshold == 0
 
 # Load dataset information from a JSON file
-with open(f'{args.where_is_your_code}/dataset_id.json', 'r') as file:
+with open(f'dataset_id.json', 'r') as file:
     data_info = json.load(file)
 tasktype = data_info.get(str(args.openml_id))['tasktype']
 
 # Define directory for loading the optimization logs and for saving reproducing logs
-fname = os.path.join(savepath, f'optim_logs/data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
+fname = os.path.join(args.savepath, f'optim_logs/data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
 print(fname)
 assert os.path.exists(fname) # If there is no optimization log, assertion error will be raised
 
@@ -51,9 +48,9 @@ assert os.path.exists(fname) # If there is no optimization log, assertion error 
 opt_logs = joblib.load(fname)
 
 # Make directory for saving the results
-if not os.path.exists(os.path.join(savepath, f'reproduce_logs/{args.ensemble}')):
-    os.makedirs(os.path.join(savepath, f'reproduce_logs/{args.ensemble}'))
-fname2 = os.path.join(savepath, f'reproduce_logs/{args.ensemble}/data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.npy')
+if not os.path.exists(os.path.join(args.savepath, f'reproduce_logs/{args.ensemble}')):
+    os.makedirs(os.path.join(args.savepath, f'reproduce_logs/{args.ensemble}'))
+fname2 = os.path.join(args.savepath, f'reproduce_logs/{args.ensemble}/data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.npy')
 
 # Main part starts here (Prevent the duplicated running):
 if not os.path.exists(fname2):
@@ -111,7 +108,7 @@ if not os.path.exists(fname2):
     inference_results["Validation"]["Performance"] = val_metrics
     inference_results["Test"]["Performance"] = test_metrics
     
-    print(device, env_info, args.openml_id, data_info.get(str(args.openml_id))['name'], args.modelname, savepath)
+    print(device, env_info, args.openml_id, data_info.get(str(args.openml_id))['name'], args.modelname, args.savepath)
     print(val_metrics)
     print(test_metrics)
 
