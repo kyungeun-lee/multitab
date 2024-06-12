@@ -38,6 +38,8 @@ with open(f'dataset_id.json', 'r') as file:
 tasktype = data_info.get(str(args.openml_id))['tasktype']
 
 # Define directory for saving logs and create it if it does not exist
+if not args.savepath.endswith("optim_logs"):
+    savepath = os.path.join(savepath, "optim_logs")
 if not os.path.exists(args.savepath):
     os.makedirs(args.savepath)
 fname = os.path.join(args.savepath, f'data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
