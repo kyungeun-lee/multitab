@@ -10,7 +10,7 @@ The implementation codes of the paper "MultiTab: A Comprehensive Benchmark Suite
 - [Examples](#examples)
 - [License](#license)
 - [Contact](#contact)
-- [References] (#references)
+- [References](#references)
 
 ## Overview
 `MultiTab` is a benchmark suite designed for multi-dimensional analysis in tabular domains. It includes 210 datasets spanning both classification and regression tasks. `MultiTab` categorizes the entire data collection into diverse sub-categories based on 10 specific characteristics of tabular data, such as data size, task types, sample irregularity, and the average cardinality of categorical features. For prediction algorithms, `MultiTab` incorporates seven model classes — three GBDTs and four NNs. These models are evaluated across five experimental setups, varying in numerical feature preprocessing methods, the definition of categorical features, and the application of ensembles. This results in a total of 28 algorithm-setup combinations. Comprehensive hyperparameter tuning is performed for each algorithm and dataset to determine the optimal configurations, consuming over 1132 GPU days. All optimization logs and results are available on this project page.
