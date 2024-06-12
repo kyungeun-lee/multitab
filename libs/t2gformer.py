@@ -1,3 +1,6 @@
+## Reference: T2G-Former: Organizing Tabular Features into Relation Graphs Promotes Heterogeneous Feature Interaction (J Yan et al., AAAI 2023)
+## https://github.com/jyansir/t2g-former
+
 from libs.supervised import supmodel
 import torch, math, typing
 from libs.fttransformer import Tokenizer
