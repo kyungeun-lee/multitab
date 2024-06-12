@@ -4,7 +4,7 @@ from libs.fttransformer import FTTransformer
 from libs.resnet import ResNet
 from libs.t2gformer import T2GFormer
 
-def getmodel(modelname, params, tasktype, dataset, openml_id, input_dim, output_dim):
+def getmodel(modelname, params, tasktype, dataset, openml_id, input_dim, output_dim, device):
     
     if modelname == "catboost":
         model = CatBoost(params, tasktype, dataset.X_cat)
