@@ -39,10 +39,12 @@ tasktype = data_info.get(str(args.openml_id))['tasktype']
 
 # Define directory for saving logs and create it if it does not exist
 if not args.savepath.endswith("optim_logs"):
-    savepath = os.path.join(savepath, "optim_logs")
-if not os.path.exists(args.savepath):
-    os.makedirs(args.savepath)
-fname = os.path.join(args.savepath, f'data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
+    savepath = os.path.join(args.savepath, "optim_logs")
+else:
+    savepath = args.savepath
+if not os.path.exists(savepath):
+    os.makedirs(savepath)
+fname = os.path.join(savepath, f'data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
     
 # Prevent duplicated running by checking if the logs exist
 train = True
@@ -96,7 +98,7 @@ if train:
         for k, v in test_metrics.items():
             trial.set_user_attr(k, v)
         
-        print(device, env_info, args.openml_id, data_info.get(str(args.openml_id))['name'], args.modelname, args.savepath)
+        print(device, env_info, args.openml_id, data_info.get(str(args.openml_id))['name'], args.modelname, savepath)
         print(val_metrics)
         print(test_metrics)
         now = datetime.datetime.now()
