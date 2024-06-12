@@ -24,7 +24,7 @@ optuna==3.5.0
 argparse==1.1
 torch==2.0.1
 joblib==1.2.0
-sklearn==1.2.2
+scikit-learn==1.2.2
 scipy==1.10.1
 numpy==1.26.0
 pandas==2.1.1
