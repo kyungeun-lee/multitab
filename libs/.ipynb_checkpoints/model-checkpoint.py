@@ -4,7 +4,7 @@ from libs.fttransformer import FTTransformer
 from libs.resnet import ResNet
 from libs.t2gformer import T2GFormer
 
-def getmodel(modelname, params, tasktype, dataset, openml_id):
+def getmodel(modelname, params, tasktype, dataset, openml_id, input_dim, output_dim):
     
     if modelname == "catboost":
         model = CatBoost(params, tasktype, dataset.X_cat)
@@ -13,21 +13,21 @@ def getmodel(modelname, params, tasktype, dataset, openml_id):
     elif modelname == "lightgbm":
         model = LightGBM(params, tasktype, dataset.X_cat)
     elif (modelname == "mlp") & (tasktype == "multiclass"):
-        model = MLP(params, tasktype, input_dim=X_train.size(1), output_dim=y_train.size(1), device=device, data_id=openml_id)
+        model = MLP(params, tasktype, input_dim=input_dim, output_dim=output_dim, device=device, data_id=openml_id)
     elif (modelname == "mlp"):
-        model = MLP(params, tasktype, input_dim=X_train.size(1), output_dim=1, device=device, data_id=openml_id)
+        model = MLP(params, tasktype, input_dim=input_dim, output_dim=1, device=device, data_id=openml_id)
     elif (modelname == "ftt") & (tasktype == "multiclass"):
-        model = FTTransformer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=X_train.size(1), output_dim=y_train.size(1), device=device, data_id=openml_id)
+        model = FTTransformer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=output_dim, device=device, data_id=openml_id)
     elif modelname == "ftt":
-        model = FTTransformer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=X_train.size(1), output_dim=1, device=device, data_id=openml_id)
+        model = FTTransformer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=1, device=device, data_id=openml_id)
     elif (modelname == "resnet") & (tasktype == "multiclass"):
-        model = ResNet(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=X_train.size(1), output_dim=y_train.size(1), device=device, data_id=openml_id)
+        model = ResNet(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=output_dim, device=device, data_id=openml_id)
     elif modelname == "resnet":
-        model = ResNet(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=X_train.size(1), output_dim=1, device=device, data_id=openml_id)
+        model = ResNet(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=1, device=device, data_id=openml_id)
     elif (modelname == "t2gformer") & (tasktype == "multiclass"):
-        model = T2GFormer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=X_train.size(1), output_dim=y_train.size(1), device=device, data_id=openml_id)
+        model = T2GFormer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=output_dim, device=device, data_id=openml_id)
     elif modelname == "t2gformer":
-        model = T2GFormer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=X_train.size(1), output_dim=1, device=device, data_id=openml_id)
+        model = T2GFormer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=1, device=device, data_id=openml_id)
         
     return model
 

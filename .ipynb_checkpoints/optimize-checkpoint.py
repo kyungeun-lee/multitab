@@ -81,7 +81,7 @@ if train:
         print("### Start: ", trial.datetime_start.strftime("%m/%d %H:%M:%S"))
         params = get_search_space(trial, args.modelname)    
         
-        model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id)
+        model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id, X_train.shape[1], y_train.shape[1])
         model.fit(X_train, y_train, X_val, y_val)
         
         preds_val = model.predict(X_val)
