@@ -84,7 +84,7 @@ Here we provide simple examples step by step.
     - openml_id: Dataset index (See `dataset_id.json` for detailed information). (dtype: `int`)
     - modelname: Model name (Options: xgboost, catboost, lightgbm, mlp, resnet, ftt, t2gformer) 
     - preprocessing: Numerical feature preprocessing methods (Options: standardization, quantile)
-    - cat_threshold: Thresholds for defining the categorical features (dtype: `int`)
+    - cat_threshold: Thresholds for defining the categorical features (Note: In the case of models without special modules for categorical features like XGBoost and MLP, cat_threshold should be 0.) (dtype: `int`)
     - savepath: Path to save the results (dtype: `str`)
     
     **RESULTS**
@@ -98,7 +98,7 @@ Here we provide simple examples step by step.
     - openml_id: Dataset index (See `dataset_id.json` for detailed information). (dtype: `int`)
     - modelname: Model name (Options: xgboost, catboost, lightgbm, mlp, resnet, ftt, t2gformer) 
     - preprocessing: Numerical feature preprocessing methods (Options: standardization, quantile)
-    - cat_threshold: Thresholds for defining the categorical features (dtype: `int`)
+    - cat_threshold: Thresholds for defining the categorical features (Note: In the case of models without special modules for categorical features like XGBoost and MLP, cat_threshold should be 0.) (dtype: `int`)
     - ensemble: Optional argument for allowing the repeated reproduction (dtype: `int`)
     - savepath: Path to save the results (dtype: `str`)
     
