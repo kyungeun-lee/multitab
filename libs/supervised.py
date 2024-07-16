@@ -20,95 +20,93 @@ class TqdmLoggingHandler(logging.StreamHandler):
             self.handleError(record)
 
 class supmodel(torch.nn.Module):
-    def __init__(self, params, tasktype, device, data_id=None, modelname=None, cat_features=[]):
+    def __init__(self, params, device, data_id=None, modelname=None, cat_features=[]):
         
         super(supmodel, self).__init__()
         
-        self.tasktype = tasktype
         self.cat_features = cat_features
         self.device = device
         self.params = params
         self.data_id = data_id
         self.modelname = modelname
     
-    def fit(self, X_train, y_train, X_val, y_val):
+#     def fit(self, X_train, y_train, X_val, y_val):
         
-        if y_train.ndim == 2:
-            X_train = X_train[~torch.isnan(y_train[:, 0]), :]
-            y_train = y_train[~torch.isnan(y_train[:, 0])]
-        else:
-            X_train = X_train[~torch.isnan(y_train), :]
-            y_train = y_train[~torch.isnan(y_train)]
+#         if y_train.ndim == 2:
+#             X_train = X_train[~torch.isnan(y_train[:, 0]), :]
+#             y_train = y_train[~torch.isnan(y_train[:, 0])]
+#         else:
+#             X_train = X_train[~torch.isnan(y_train), :]
+#             y_train = y_train[~torch.isnan(y_train)]
             
-        batch_size = get_batch_size(len(X_train))
+#         batch_size = get_batch_size(len(X_train))
             
-        optimizer = self.model.make_optimizer()
-        if self.tasktype == "regression":
-            loss_fn = torch.nn.functional.mse_loss
-        elif self.tasktype == "binclass":
-            loss_fn = torch.nn.functional.binary_cross_entropy_with_logits
-        else:
-            loss_fn = torch.nn.functional.cross_entropy
+#         optimizer = self.model.make_optimizer()
+#         if self.tasktype == "regression":
+#             loss_fn = torch.nn.functional.mse_loss
+#         elif self.tasktype == "binclass":
+#             loss_fn = torch.nn.functional.binary_cross_entropy_with_logits
+#         else:
+#             loss_fn = torch.nn.functional.cross_entropy
             
-        train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
-        del X_train, y_train
+#         train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
+#         del X_train, y_train
         
-        if len(train_dataset) % batch_size == 1:
-            train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, drop_last=True) ## prevent error for batchnorm
-        else:
-            train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+#         if len(train_dataset) % batch_size == 1:
+#             train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, drop_last=True) ## prevent error for batchnorm
+#         else:
+#             train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
         
-        optimizer.zero_grad(); optimizer.step()
+#         optimizer.zero_grad(); optimizer.step()
         
-        if self.params["lr_scheduler"]:
-            scheduler = CosineAnnealingLR_Warmup(optimizer, base_lr=self.params['learning_rate'], warmup_epochs=10, 
-                                                 T_max=self.params.get('n_epochs'), iter_per_epoch=len(train_loader), 
-                                                 warmup_lr=1e-6, eta_min=0, last_epoch=-1)
+#         if self.params["lr_scheduler"]:
+#             scheduler = CosineAnnealingLR_Warmup(optimizer, base_lr=self.params['learning_rate'], warmup_epochs=10, 
+#                                                  T_max=self.params.get('n_epochs'), iter_per_epoch=len(train_loader), 
+#                                                  warmup_lr=1e-6, eta_min=0, last_epoch=-1)
         
-        self.model = self.model.to(self.device)
+#         self.model = self.model.to(self.device)
         
-        loss_history = []
-        pbar = tqdm(range(1, self.params.get('n_epochs', 0) + 1))
-        for epoch in pbar:
-            pbar.set_description("EPOCH: %i" %epoch)
+#         loss_history = []
+#         pbar = tqdm(range(1, self.params.get('n_epochs', 0) + 1))
+#         for epoch in pbar:
+#             pbar.set_description("EPOCH: %i" %epoch)
             
-            for i, (x, y) in enumerate(train_loader):
-                self.model.train(); optimizer.zero_grad()
+#             for i, (x, y) in enumerate(train_loader):
+#                 self.model.train(); optimizer.zero_grad()
                 
-                out = self.model(x.to(self.device), self.cat_features)
-                if out.size() != y.size():
-                    out = out.view(y.size())
-                loss = loss_fn(out, y.to(self.device))
-                loss_history.append(loss.item())
+#                 out = self.model(x.to(self.device), self.cat_features)
+#                 if out.size() != y.size():
+#                     out = out.view(y.size())
+#                 loss = loss_fn(out, y.to(self.device))
+#                 loss_history.append(loss.item())
                 
-                loss.backward()
-                optimizer.step() 
-                if self.params["lr_scheduler"]:
-                    scheduler.step()
+#                 loss.backward()
+#                 optimizer.step() 
+#                 if self.params["lr_scheduler"]:
+#                     scheduler.step()
                 
-                pbar.set_postfix_str(f'data_id: {self.data_id}, Model: {self.modelname}, Tr loss: {loss:.5f}')
+#                 pbar.set_postfix_str(f'data_id: {self.data_id}, Model: {self.modelname}, Tr loss: {loss:.5f}')
                 
-        self.model.eval()
+#         self.model.eval()
     
-    def predict(self, X_test, cat_features=[]):
-        with torch.no_grad():
-#             import IPython; IPython.embed()
-            if (X_test.shape[0] > 10000):
-                logits = []
-                iters = X_test.shape[0] // 100 + 1
-                for i in range(iters):
-                    pred = self.model(X_test[100*i:100*(i+1)], cat_features)
-                    logits.append(pred)
-                    del pred
-                logits = torch.concatenate(logits, dim=0)
-            else:
-                logits = self.model(X_test, cat_features)
-            if self.tasktype == "binclass":
-                return torch.sigmoid(logits).round()
-            elif self.tasktype == "regression":
-                return logits
-            else:
-                return torch.argmax(logits, dim=1)
+#     def predict(self, X_test, cat_features=[]):
+#         with torch.no_grad():
+#             if (X_test.shape[0] > 10000):
+#                 logits = []
+#                 iters = X_test.shape[0] // 100 + 1
+#                 for i in range(iters):
+#                     pred = self.model(X_test[100*i:100*(i+1)], cat_features)
+#                     logits.append(pred)
+#                     del pred
+#                 logits = torch.concatenate(logits, dim=0)
+#             else:
+#                 logits = self.model(X_test, cat_features)
+#             if self.tasktype == "binclass":
+#                 return torch.sigmoid(logits).round()
+#             elif self.tasktype == "regression":
+#                 return logits
+#             else:
+#                 return torch.argmax(logits, dim=1)
     
     def predict_proba(self, X_test, cat_features=[], logit=False):
         with torch.no_grad():

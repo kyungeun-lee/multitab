@@ -140,10 +140,9 @@ class build_resnet(resnet):
 
     
 class ResNet(supmodel):
-    def __init__(self, params, tasktype, num_cols=[], cat_features=[], input_dim=0, output_dim=0, device='cuda', data_id=None, modelname="resnet"):
+    def __init__(self, params, num_cols=[], cat_features=[], input_dim=0, output_dim=0, device='cuda', data_id=None, modelname="resnet"):
         
-        super().__init__(params, tasktype, device, data_id, modelname)
-        self.tasktype = tasktype
+        super().__init__(params, device, data_id, modelname)
         self.model = build_resnet(num_cols, cat_features, params["d_embedding"], params["d"], params["d_hidden_factor"], 
                                   params["n_layers"], params["activation"], params["normalization"], params["hidden_dropout"], params["residual_dropout"], output_dim,
                                   params["optimizer"], params["learning_rate"], params["weight_decay"])
