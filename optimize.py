@@ -18,12 +18,13 @@ parser = argparse.ArgumentParser()
 # Add arguments to the parser for GPU ID, OpenML dataset ID, code directory, model name, preprocessing method, and categorical feature threshold
 parser.add_argument("--gpu_id", type=int, default=4, help="gpu index")
 parser.add_argument("--openml_id", type=int, default=4538, help="dataset index (See dataset_id.json for detailed information)")
-parser.add_argument("--modelname", type=str, default='catboost', 
-                    choices=['xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer'])
+parser.add_argument("--seed", type=int, default=1, help="seed for dataset split (cross-validation)")
+parser.add_argument("--modelname", type=str, default='lr', 
+                    choices=['lr', 'randomforest', 'xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer'])
 parser.add_argument("--preprocessing", type=str, default="quantile", 
                     choices=['standardization', 'quantile'], help="numerical feature preprocessing method")
 parser.add_argument("--cat_threshold", type=int, default=20, help="categorical feature definition")
-parser.add_argument("--savepath", type=str, default="results/optim_logs", help="path to save the results")
+parser.add_argument("--savepath", type=str, default="tmp", help="path to save the results")
 
 # Parse the arguments
 args = parser.parse_args()
@@ -39,7 +40,7 @@ tasktype = data_info.get(str(args.openml_id))['tasktype']
 
 # Define directory for saving logs and create it if it does not exist
 if not args.savepath.endswith("optim_logs"):
-    savepath = os.path.join(args.savepath, "optim_logs")
+    savepath = os.path.join(args.savepath, "optim_logs", f'seed={args.seed}')
 else:
     savepath = args.savepath
 if not os.path.exists(savepath):
@@ -65,7 +66,7 @@ if train:
     
     # Load dataset with specified preprocessing
     quantile = bool(args.preprocessing == "quantile")
-    dataset = TabularDataset(args.openml_id, tasktype, device=device, cat_threshold=args.cat_threshold, modelname=args.modelname, quantile=quantile)
+    dataset = TabularDataset(args.openml_id, tasktype, device=device, seed=args.seed, cat_threshold=args.cat_threshold, modelname=args.modelname, quantile=quantile)
     
     # Split dataset into training, validation, and test sets
     (X_train, y_train), (X_val, y_val), (X_test, y_test) = dataset._indv_dataset()
@@ -85,15 +86,15 @@ if train:
         model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id, X_train.shape[1], output_dim, device)
         model.fit(X_train, y_train, X_val, y_val)
         
-        preds_val = model.predict(X_val)
-        preds_test = model.predict(X_test)
+        preds_val = model.predict(X_val); preds_test = model.predict(X_test)
+        probs_val = model.predict_proba(X_val); probs_test = model.predict_proba(X_test)
         
         if tasktype == "regression":
             val_metrics = calculate_metric(y_val*y_std, preds_val*y_std, tasktype, 'val')
             test_metrics = calculate_metric(y_test*y_std, preds_test*y_std, tasktype, 'test')
         else:
-            val_metrics = calculate_metric(y_val, preds_val, tasktype, 'val')
-            test_metrics = calculate_metric(y_test, preds_test, tasktype, 'test')
+            val_metrics = calculate_metric(y_val, preds_val, tasktype, 'val', prob=probs_val)
+            test_metrics = calculate_metric(y_test, preds_test, tasktype, 'test', prob=probs_test)
         for k, v in val_metrics.items():
             trial.set_user_attr(k, v)
         for k, v in test_metrics.items():
