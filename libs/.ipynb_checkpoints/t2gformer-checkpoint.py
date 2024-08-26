@@ -350,7 +350,7 @@ class t2gformer(torch.nn.Module):
             layer['attention'].frozen = True
 
 class build_t2g(t2gformer):
-    def __init__(self, params, tasktype, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda'):
+    def __init__(self, params, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda'):
         super().__init__(num_cols, categories, params["token_bias"], params["n_layers"], params["d_token"] * params["n_heads"], 
                          params["n_heads"], params["d_ffn_factor"], params["attention_dropout"], params["ffn_dropout"], params["residual_dropout"], 
                          params["activation"], params["prenormalization"], params["initialization"],
@@ -393,12 +393,11 @@ class build_t2g(t2gformer):
             return torch.optim.SGD(parameter_groups, lr=self.learning_rate, weight_decay=self.weight_decay, momentum=0.9)
             
 class T2GFormer(supmodel):
-    def __init__(self, params, tasktype, num_cols=[], cat_features=[], input_dim=0, output_dim=0, device="cuda", data_id=None, modelname="t2g"):
+    def __init__(self, params, num_cols=[], cat_features=[], input_dim=0, output_dim=0, device="cuda", data_id=None, modelname="t2g"):
         
-        super().__init__(params, tasktype, device, data_id, modelname)
+        super().__init__(params, device, data_id, modelname)
         
-        self.tasktype = tasktype
-        self.model = build_t2g(params, tasktype, num_cols, cat_features, input_dim, output_dim, device)
+        self.model = build_t2g(params, num_cols, cat_features, input_dim, output_dim, device)
         self.model = self.model.to(device)
         
     def fit(self, X_train, y_train, X_val, y_val):

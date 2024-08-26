@@ -2,7 +2,7 @@ from libs.supervised import supmodel
 import torch
 
 class build_mlp(torch.nn.Module):
-    def __init__(self, tasktype, input_dim, output_dim,
+    def __init__(self, input_dim, output_dim,
                  depth, width, dropout, normalization, activation,
                  optimizer, learning_rate, weight_decay):
         
@@ -12,7 +12,6 @@ class build_mlp(torch.nn.Module):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         
-        self.tasktype = tasktype
         if normalization == "batchnorm":
             normalize_fn = torch.nn.BatchNorm1d(width)
         elif normalization == "layernorm":
@@ -54,11 +53,10 @@ class build_mlp(torch.nn.Module):
         
         
 class MLP(supmodel):
-    def __init__(self, params, tasktype, input_dim=0, output_dim=0, device='cuda', data_id=None, modelname="mlp"):
+    def __init__(self, params, input_dim=0, output_dim=0, device='cuda', data_id=None, modelname="mlp"):
         
-        super().__init__(params, tasktype, device, data_id, modelname)
-        self.tasktype = tasktype
-        self.model = build_mlp(tasktype, input_dim, output_dim, params['depth'], params['width'], params['dropout'], params['normalization'], params['activation'],
+        super().__init__(params, device, data_id, modelname)
+        self.model = build_mlp(input_dim, output_dim, params['depth'], params['width'], params['dropout'], params['normalization'], params['activation'],
                                params['optimizer'], params['learning_rate'], params['weight_decay'])
         self.model = self.model.to(device)
     

@@ -80,7 +80,8 @@ if not os.path.exists(fname2):
             raise ValueError # "Unknown class problem" --- Inherent challenges in GBDTs
     
     # Define and train the model
-    model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id, X_train.shape[1], y_train.shape[1], device)
+    output_dim = y_train.shape[1] if tasktype == "multiclass" else 1
+    model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id, X_train.shape[1], output_dim, device)
     model.fit(X_train, y_train, X_val, y_val)
     
     # Model inference

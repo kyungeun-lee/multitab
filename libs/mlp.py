@@ -1,3 +1,7 @@
+## Reference
+## Revisiting deep learning models for tabular data (Y Gorishniy et al., NeurIPS 2021)
+## https://github.com/yandex-research/rtdl
+
 from libs.supervised import supmodel
 import torch
 

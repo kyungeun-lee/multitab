@@ -143,7 +143,7 @@ def geglu(x):
     return a * torch.nn.functional.gelu(b)
     
 class Transformer(torch.nn.Module):
-    def __init__(self, params, tasktype, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda'):
+    def __init__(self, params, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda'):
         assert (params["kv_compression"] == None) ^ (params["kv_compression_sharing"] != None)
         
         super(Transformer, self).__init__()
@@ -290,9 +290,9 @@ class Transformer(torch.nn.Module):
         
         
 class build_ftt(Transformer):
-    def __init__(self, params, tasktype, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda'):
-        super().__init__(params, tasktype, num_cols, categories, input_dim, output_dim, device)
-        self.model = Transformer(params, tasktype, num_cols, categories, input_dim, output_dim, device)
+    def __init__(self, params, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda'):
+        super().__init__(params, num_cols, categories, input_dim, output_dim, device)
+        self.model = Transformer(params, num_cols, categories, input_dim, output_dim, device)
     
     def forward(self, x, cat_features=[]):
         return self.model(x)
@@ -316,11 +316,10 @@ class build_ftt(Transformer):
             return torch.optim.SGD(parameter_groups, lr=self.learning_rate, weight_decay=self.weight_decay, momentum=0.9)
 
 class FTTransformer(supmodel):
-    def __init__(self, params, tasktype, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda', data_id=None, modelname="ftt"):
+    def __init__(self, params, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda', data_id=None, modelname="ftt"):
         
-        super().__init__(params, tasktype, device, data_id, modelname)
-        self.tasktype = tasktype
-        self.model = build_ftt(params, tasktype, num_cols, categories, input_dim, output_dim, device)
+        super().__init__(params, device, data_id, modelname)
+        self.model = build_ftt(params, num_cols, categories, input_dim, output_dim, device)
         self.model = self.model.to(device)
     
     def fit(self, X_train, y_train, X_val, y_val):

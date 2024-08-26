@@ -1,6 +1,9 @@
 from libs.supervised import supmodel
 import torch, math, typing
 
+## Reference
+## Revisiting deep learning models for tabular data (Y Gorishniy et al., NeurIPS 2021)
+## https://github.com/yandex-research/rtdl
 ## source: https://github.com/yandex-research/rtdl-revisiting-models/blob/main/bin/ft_transformer.py
 
 class Tokenizer(torch.nn.Module):
