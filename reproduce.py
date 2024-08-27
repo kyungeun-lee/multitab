@@ -18,9 +18,11 @@ parser = argparse.ArgumentParser()
 
 # Add arguments to the parser for GPU ID, OpenML dataset ID, code directory, model name, preprocessing method, and categorical feature threshold
 parser.add_argument("--gpu_id", type=int, default=5)
-parser.add_argument("--openml_id", type=int, default=4538)
+parser.add_argument("--openml_id", type=int, default=25) #4538 458 // 25 45062 // 999999
+parser.add_argument("--seed", type=int, default=1)
 
-parser.add_argument("--modelname", type=str, default='xgboost', choices=['xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer'])
+parser.add_argument("--modelname", type=str, default='tabpfn', 
+                    choices=['lr', 'randomforest', 'xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer', 'tabpfn'])
 parser.add_argument("--preprocessing", type=str, default="quantile", 
                     choices=['standardization', 'quantile'], help="numerical feature preprocessing method")
 parser.add_argument("--cat_threshold", type=int, default=0, help="categorical feature definition")
@@ -40,24 +42,26 @@ with open(f'dataset_id.json', 'r') as file:
 tasktype = data_info.get(str(args.openml_id))['tasktype']
 
 # Define directory for loading the optimization logs and for saving reproducing logs
-fname = os.path.join(args.savepath, f'optim_logs/data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
+fname = os.path.join(args.savepath, f'optim_logs/seed={args.seed}/data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
 print(fname)
-assert os.path.exists(fname) # If there is no optimization log, assertion error will be raised
-
-# Load the optimization logs
-opt_logs = joblib.load(fname)
+if args.modelname not in ["tabpfn", "lr"]:
+    assert os.path.exists(fname) # If there is no optimization log, assertion error will be raised
+    
+    # Load the optimization logs
+    opt_logs = joblib.load(fname)
 
 # Make directory for saving the results
-if not os.path.exists(os.path.join(args.savepath, f'reproduce_logs/{args.ensemble}')):
-    os.makedirs(os.path.join(args.savepath, f'reproduce_logs/{args.ensemble}'))
-fname2 = os.path.join(args.savepath, f'reproduce_logs/{args.ensemble}/data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.npy')
+if not os.path.exists(os.path.join(args.savepath, f'reproduce_logs/seed={args.seed}/{args.ensemble}')):
+    os.makedirs(os.path.join(args.savepath, f'reproduce_logs/seed={args.seed}/{args.ensemble}'))
+fname2 = os.path.join(args.savepath, f'reproduce_logs/seed={args.seed}/{args.ensemble}/data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.npy')
 
 # Main part starts here (Prevent the duplicated running):
 if not os.path.exists(fname2):
-    params = opt_logs.best_params
     
-    # Add default(fixed) parameters
-    params = add_default_params(args.modelname, params)
+    if args.modelname not in ["tabpfn", "lr"]:
+        params = opt_logs.best_params
+        # Add default(fixed) parameters
+        params = add_default_params(args.modelname, params)
     
     # Set GPU environment variables
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -68,7 +72,7 @@ if not os.path.exists(fname2):
 
     # Load dataset with specified preprocessing
     quantile = bool(args.preprocessing == "quantile")
-    dataset = TabularDataset(args.openml_id, tasktype, device=device, cat_threshold=args.cat_threshold, modelname=args.modelname, quantile=quantile)
+    dataset = TabularDataset(args.openml_id, tasktype, device=device, seed=args.seed, cat_threshold=args.cat_threshold, modelname=args.modelname, quantile=quantile)
     
     # Split dataset into training, validation, and test sets
     (X_train, y_train), (X_val, y_val), (X_test, y_test) = dataset._indv_dataset()
@@ -81,36 +85,26 @@ if not os.path.exists(fname2):
     
     # Define and train the model
     output_dim = y_train.shape[1] if tasktype == "multiclass" else 1
-    model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id, X_train.shape[1], output_dim, device)
+    if args.modelname in ["tabpfn", "lr"]:
+        model = getmodel(args.modelname, {}, tasktype, dataset, args.openml_id, X_train.shape[1], output_dim, device)
+    else:
+        model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id, X_train.shape[1], output_dim, device)
     model.fit(X_train, y_train, X_val, y_val)
     
     # Model inference
-    preds_val = model.predict(X_val)
     preds_test = model.predict(X_test)
     # For classification tasks with ensemble techniques, we should calculate probability or logits
-    if args.modelname in ["mlp", "resnet", "ftt", "t2gformer"]:
-        preds_test_prob = model.predict_proba(X_test).detach().cpu().numpy()
-        preds_test_logit = model.predict_proba(X_test, logit=True).detach().cpu().numpy()
+    preds_test_prob = model.predict_proba(X_test) if tasktype != "regression" else None
         
-    if args.modelname in ["xgboost", "catboost", "lightgbm"]:
-        inference_results = {
-            "Validation": {"Prediction": preds_val}, "Test": {"Prediction": preds_test}}
-    else:
-        inference_results = {
-            "Validation": {"Prediction": preds_val.detach().cpu().numpy()}, 
-            "Test": {"Prediction": preds_test.detach().cpu().numpy(), "Probability": preds_test_prob, "Logit": preds_test_logit}}
-
+    inference_results = {"Prediction": preds_test, "Probability": preds_test_prob}
+    
     if tasktype == "regression":
-        val_metrics = calculate_metric(y_val*y_std, preds_val*y_std, tasktype, 'val')
-        test_metrics = calculate_metric(y_test*y_std, preds_test*y_std, tasktype, 'test')
+        test_metrics = calculate_metric(y_test*y_std, preds_test*y_std, None, tasktype, 'test')
     else:
-        val_metrics = calculate_metric(y_val, preds_val, tasktype, 'val')
-        test_metrics = calculate_metric(y_test, preds_test, tasktype, 'test')
-    inference_results["Validation"]["Performance"] = val_metrics
-    inference_results["Test"]["Performance"] = test_metrics
+        test_metrics = calculate_metric(y_test, preds_test, preds_test_prob, tasktype, 'test')
+    inference_results["Performance"] = test_metrics
     
     print(device, env_info, args.openml_id, data_info.get(str(args.openml_id))['name'], args.modelname, args.savepath)
-    print(val_metrics)
     print(test_metrics)
 
     print("#############################################")
