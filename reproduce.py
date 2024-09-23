@@ -3,7 +3,7 @@
 ## Paper info: MultiTab: A Comprehensive Benchmark Suite with Multi-Dimensional Analysis in Tabular Domains
 ## Contact author: Kyungeun Lee (kyungeun.lee@lgresearch.ai)
 
-import optuna, argparse, os, torch, json, joblib, time, datetime
+import optuna, argparse, os, torch, json, joblib, time, datetime, sys
 from libs.data import TabularDataset
 from libs.model import *
 from libs.eval import *
@@ -18,11 +18,11 @@ parser = argparse.ArgumentParser()
 
 # Add arguments to the parser for GPU ID, OpenML dataset ID, code directory, model name, preprocessing method, and categorical feature threshold
 parser.add_argument("--gpu_id", type=int, default=5)
-parser.add_argument("--openml_id", type=int, default=25) #4538 458 // 25 45062 // 999999
+parser.add_argument("--openml_id", type=int, default=4538) #4538 458 // 25 45062 // 999999
 parser.add_argument("--seed", type=int, default=1)
 
-parser.add_argument("--modelname", type=str, default='tabpfn', 
-                    choices=['lr', 'randomforest', 'xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer', 'tabpfn'])
+parser.add_argument("--modelname", type=str, default='xgboost', 
+                    choices=['lr', 'randomforest', 'xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer', 'tabpfn']) #regression/large data -- ValueError, large data
 parser.add_argument("--preprocessing", type=str, default="quantile", 
                     choices=['standardization', 'quantile'], help="numerical feature preprocessing method")
 parser.add_argument("--cat_threshold", type=int, default=0, help="categorical feature definition")
@@ -33,7 +33,7 @@ parser.add_argument("--savepath", type=str, default="results", help="path to sav
 args = parser.parse_args()
    
 # Ensure that XGBoost and MLP have no special module for categorical features
-if args.modelname in ['xgboost', 'mlp']:
+if args.modelname in ['lr', 'xgboost', 'mlp']:
     assert args.cat_threshold == 0
 
 # Load dataset information from a JSON file
@@ -46,7 +46,6 @@ fname = os.path.join(args.savepath, f'optim_logs/seed={args.seed}/data={args.ope
 print(fname)
 if args.modelname not in ["tabpfn", "lr"]:
     assert os.path.exists(fname) # If there is no optimization log, assertion error will be raised
-    
     # Load the optimization logs
     opt_logs = joblib.load(fname)
 
@@ -89,7 +88,11 @@ if not os.path.exists(fname2):
         model = getmodel(args.modelname, {}, tasktype, dataset, args.openml_id, X_train.shape[1], output_dim, device)
     else:
         model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id, X_train.shape[1], output_dim, device)
-    model.fit(X_train, y_train, X_val, y_val)
+    try:
+        model.fit(X_train, y_train, X_val, y_val)
+    except ValueError:
+        np.save(fname2, "ValueError: Not implemented.")
+        sys.exit()
     
     # Model inference
     preds_test = model.predict(X_test)

@@ -35,6 +35,10 @@ def getmodel(modelname, params, tasktype, dataset, openml_id, input_dim, output_
         model = T2GFormer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=output_dim, device=device, data_id=openml_id)
     elif modelname == "t2gformer":
         model = T2GFormer(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=1, device=device, data_id=openml_id)
+    elif (modelname == "saint") & (tasktype == "multiclass"):
+        model = main_saint(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=output_dim, device=device, data_id=openml_id)
+    elif modelname == "saint":
+        model = main_saint(params, tasktype, dataset.X_num, dataset.X_categories, input_dim=input_dim, output_dim=1, device=device, data_id=openml_id)
         
     return model
 

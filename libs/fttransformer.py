@@ -319,13 +319,13 @@ class build_ftt(Transformer):
             return torch.optim.SGD(parameter_groups, lr=self.learning_rate, weight_decay=self.weight_decay, momentum=0.9)
 
 class FTTransformer(supmodel):
-    def __init__(self, params, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda', data_id=None, modelname="ftt"):
+    def __init__(self, params, tasktype, num_cols=[], categories=[], input_dim=0, output_dim=0, device='cuda', data_id=None, modelname="ftt"):
         
-        super().__init__(params, device, data_id, modelname)
+        super().__init__(tasktype, params, device, data_id, modelname)
         self.model = build_ftt(params, num_cols, categories, input_dim, output_dim, device)
         self.model = self.model.to(device)
     
-    def fit(self, X_train, y_train, X_val, y_val):
+    def fit(self, X_train, y_train):
         
         if y_train.ndim == 2:
             X_train = X_train[~torch.isnan(y_train[:, 0])]
@@ -333,7 +333,15 @@ class FTTransformer(supmodel):
         else:
             X_train = X_train[~torch.isnan(y_train)]
             y_train = y_train[~torch.isnan(y_train)]
-            
+        
+        ### if we use early stopping!
+        n_samples = len(X_train)
+        train_idx = np.random.choice(n_samples, int(0.9*n_samples), replace=False)
+        X_val = X_train[~train_idx]
+        y_val = y_train[~train_idx]
+        X_train = X_train[train_idx]
+        y_train = y_train[train_idx]
+        
         if y_train.ndim == 1:
             y_train = y_train.unsqueeze(1)
             y_val = y_val.unsqueeze(1)

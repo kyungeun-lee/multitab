@@ -4,15 +4,17 @@ from lightgbm import LGBMClassifier, LGBMRegressor
 import torch
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
 class LR(torch.nn.Module):
     def __init__(self, tasktype):
         self.tasktype = tasktype
-        self.model = LogisticRegression()
+        self.model = LinearRegression() if self.tasktype == "regression" else LogisticRegression()
         
-    def fit(self, X_train, y_train, X_val, y_val):
+    def fit(self, X_train, y_train):
+        X_train = X_train.cpu().numpy()
+        y_train = y_train.cpu().numpy()
         if self.tasktype == "multiclass":
             y_train = np.argmax(y_train, axis=1)
         self.model.fit(X_train, y_train)
@@ -32,7 +34,7 @@ class RandomForest(torch.nn.Module):
         else:
             self.model = RandomForestClassifier(**params)
         
-    def fit(self, X_train, y_train, X_val, y_val):
+    def fit(self, X_train, y_train):
         if self.tasktype == "multiclass":
             y_train = np.argmax(y_train, axis=1)
         self.model.fit(X_train, y_train)
@@ -53,7 +55,7 @@ class CatBoost(torch.nn.Module):
         self.cat_features = cat_features
         self.model = model_fn[tasktype](loss_function=loss_fn[tasktype], eval_metric=eval_fn[tasktype], cat_features=cat_features, **params)
         
-    def fit(self, X_train, y_train, X_val, y_val):
+    def fit(self, X_train, y_train):
         if y_train.ndim == 2:
             X_train = X_train[~torch.isnan(y_train[:, 0]), :]
             y_train = y_train[~torch.isnan(y_train[:, 0])]
@@ -63,6 +65,14 @@ class CatBoost(torch.nn.Module):
         
         X_train = pd.DataFrame(X_train.cpu()).astype({k: 'int' for k in self.cat_features})
         y_train = np.argmax(y_train.cpu().numpy(), axis=1) if self.tasktype == "multiclass" else y_train.cpu().numpy()
+        
+        ### if we use early stopping!
+        n_samples = len(X_train)
+        train_idx = np.random.choice(n_samples, int(0.9*n_samples), replace=False)
+        X_val = X_train[~train_idx]
+        y_val = y_train[~train_idx]
+        X_train = X_train[train_idx]
+        y_train = y_train[train_idx]
         
         X_val = pd.DataFrame(X_val.cpu()).astype({k: 'int' for k in self.cat_features})
         y_val = np.argmax(y_val.cpu().numpy(), axis=1) if self.tasktype == "multiclass" else y_val.cpu().numpy()
@@ -91,17 +101,24 @@ class XGBoost(torch.nn.Module):
         self.model = model_fn[tasktype](
             booster='gbtree', tree_method='gpu_hist', objective=loss_fn[tasktype], **params)
         
-    def fit(self, X_train, y_train, X_val, y_val):
+    def fit(self, X_train, y_train):
         if y_train.ndim == 2:
             X_train = X_train[~torch.isnan(y_train[:, 0]), :]
             y_train = y_train[~torch.isnan(y_train[:, 0])]
         else:
             X_train = X_train[~torch.isnan(y_train), :]
             y_train = y_train[~torch.isnan(y_train)]
-        
-#         import IPython; IPython.embed()
+    
         X_train = pd.DataFrame(X_train.cpu()).astype({k: 'int' for k in self.cat_features})
         y_train = np.argmax(y_train.cpu().numpy(), axis=1) if self.tasktype == "multiclass" else y_train.cpu().numpy()
+        
+        ### if we use early stopping!
+        n_samples = len(X_train)
+        train_idx = np.random.choice(n_samples, int(0.9*n_samples), replace=False)
+        X_val = X_train[~train_idx]
+        y_val = y_train[~train_idx]
+        X_train = X_train[train_idx]
+        y_train = y_train[train_idx]
         
         X_val = pd.DataFrame(X_val.cpu()).astype({k: 'int' for k in self.cat_features})
         y_val = np.argmax(y_val.cpu().numpy(), axis=1) if self.tasktype == "multiclass" else y_val.cpu().numpy()
@@ -126,7 +143,7 @@ class LightGBM(torch.nn.Module):
         self.tasktype = tasktype
         self.model = model_fn[tasktype](objective=loss_fn[tasktype], **params)
         
-    def fit(self, X_train, y_train, X_val, y_val):
+    def fit(self, X_train, y_train):
         if y_train.ndim == 2:
             X_train = X_train[~torch.isnan(y_train[:, 0]), :]
             y_train = y_train[~torch.isnan(y_train[:, 0])]
@@ -137,10 +154,18 @@ class LightGBM(torch.nn.Module):
         X_train = pd.DataFrame(X_train.cpu()).astype({k: 'category' for k in self.cat_features})
         y_train = np.argmax(y_train.cpu().numpy(), axis=1) if self.tasktype == "multiclass" else y_train.cpu().numpy()
         
+        ### if we use early stopping!
+        n_samples = len(X_train)
+        train_idx = np.random.choice(n_samples, int(0.9*n_samples), replace=False)
+        X_val = X_train[~train_idx]
+        y_val = y_train[~train_idx]
+        X_train = X_train[train_idx]
+        y_train = y_train[train_idx]
+        
         X_val = pd.DataFrame(X_val.cpu()).astype({k: 'category' for k in self.cat_features})
         y_val = np.argmax(y_val.cpu().numpy(), axis=1) if self.tasktype == "multiclass" else y_val.cpu().numpy()
         
-        self.model.fit(X_train, y_train, eval_set=[(X_val, y_val)], eval_metric=None, verbose=False, categorical_feature="auto")
+        self.model.fit(X_train, y_train, eval_set=[(X_val, y_val)], eval_metric=None, categorical_feature="auto")
         
     def predict(self, X_test):
         X_test = pd.DataFrame(X_test.cpu()).astype({k: 'category' for k in self.cat_features})

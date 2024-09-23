@@ -2,7 +2,14 @@ import optuna
 
 ### Define hyperparameter search space (Supplementary E)
 def get_search_space(trial, modelname):
-    if modelname == "catboost":
+    if modelname == "randomforest":
+        params = {
+            'max_leaf_nodes': trial.suggest_int('max_leaf_nodes', 5000, 50000),
+            'min_sample_leaf': trial.suggest_categorical('min_sample_leaf', [1, 2, 3, 4, 5, 10, 20, 40, 80]),
+            'max_features': trial.suggest_categorical('max_features', []),
+            'n_estimators': 300
+        }
+    elif modelname == "catboost":
         params = {
             'max_depth': trial.suggest_int('max_depth', 3, 10),
             'learning_rate': trial.suggest_float('learning_rate', 1e-5, 1, log=True),
@@ -123,4 +130,18 @@ def get_search_space(trial, modelname):
             'n_epochs': 100,
             'optimizer': trial.suggest_categorical('optimizer', ["AdamW", "Adam", "sgd"]) 
         }
+#     elif modelname == "saint":
+#         params = {
+#             'activation': trial.suggest_categorical('activation', ["reglu", "geglu", "sigmoid", "relu"]),
+#             'attn_dropout',
+#             'ff_dropout',
+#             'cont_embeddings': trial.suggest_categorical('cont_embeddings', ['MLP','Noemb','pos_singleMLP']),
+#             'attentiontype': trial.suggest_categorical('attentiontype', ['col','colrow','row','justmlp','attn','attnmlp']),
+#             'final_mlp_style': trial.suggest_categorical('final_mlp_style', ['common', 'sep']),
+#             'optimizer': trial.suggest_categorical('optimizer', ["AdamW", "Adam", "sgd"]),
+#             'lr_scheduler': trial.suggest_categorical('lr_scheduler', [True, False]), 
+#             'weight_decay': trial.suggest_float("weight_decay", 1e-6, 1e-3), 
+#             'learning_rate': trial.suggest_float('learning_rate', 1e-5, 1e-3, log=True),
+#             'n_epochs': 100
+#         }
     return params

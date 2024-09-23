@@ -19,8 +19,65 @@ class TqdmLoggingHandler(logging.StreamHandler):
         except Exception:
             self.handleError(record)
 
+class CallbackContainer:
+    def __init__(self, callbacks):
+        self.callbacks = callbacks or []
+
+    def on_epoch_begin(self, epoch, logs=None):
+        for callback in self.callbacks:
+            callback.on_epoch_begin(epoch, logs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        for callback in self.callbacks:
+            callback.on_epoch_end(epoch, logs)
+
+    def on_train_begin(self, logs=None):
+        for callback in self.callbacks:
+            callback.on_train_begin(logs)
+
+    def on_train_end(self, logs=None):
+        for callback in self.callbacks:
+            callback.on_train_end(logs)
+
+    def on_batch_begin(self, batch, logs=None):
+        for callback in self.callbacks:
+            callback.on_batch_begin(batch, logs)
+
+    def on_batch_end(self, batch, logs=None):
+        for callback in self.callbacks:
+            callback.on_batch_end(batch, logs)
+
+    def on_train_batch_end(self, batch, logs=None):
+        for callback in self.callbacks:
+            callback.on_train_batch_end(batch, logs)
+            
+class EarlyStopping:
+    def __init__(self, early_stopping_metric="val_loss", patience=500):
+        self.early_stopping_metric = early_stopping_metric
+        self.patience = patience
+        self.best_value = None
+        self.patience_counter = 0
+        self.should_stop = False
+
+    def on_epoch_end(self, epoch, logs=None):
+        current_value = logs.get(self.early_stopping_metric)
+        if current_value is None:
+            return
+
+        if self.best_value is None:
+            self.best_value = current_value
+
+        if current_value < self.best_value:
+            self.best_value = current_value
+            self.patience_counter = 0
+        else:
+            self.patience_counter += 1
+
+        if self.patience_counter >= self.patience:
+            self.should_stop = True
+            
 class supmodel(torch.nn.Module):
-    def __init__(self, params, device, data_id=None, modelname=None, cat_features=[]):
+    def __init__(self, tasktype, params, device, data_id=None, modelname=None, cat_features=[]):
         
         super(supmodel, self).__init__()
         
@@ -29,15 +86,15 @@ class supmodel(torch.nn.Module):
         self.params = params
         self.data_id = data_id
         self.modelname = modelname
+        self.tasktype = tasktype
+        
+        #reference: TabZilla
+        self._callback_container = CallbackContainer([EarlyStopping(
+            early_stopping_metric="val_loss",
+            patience=20,
+        )])
     
     def fit(self, X_train, y_train, X_val, y_val):
-        
-        if y_train.ndim == 2:
-            X_train = X_train[~torch.isnan(y_train[:, 0]), :]
-            y_train = y_train[~torch.isnan(y_train[:, 0])]
-        else:
-            X_train = X_train[~torch.isnan(y_train), :]
-            y_train = y_train[~torch.isnan(y_train)]
             
         batch_size = get_batch_size(len(X_train))
             
@@ -50,12 +107,14 @@ class supmodel(torch.nn.Module):
             loss_fn = torch.nn.functional.cross_entropy
             
         train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
-        del X_train, y_train
+        val_dataset = torch.utils.data.TensorDataset(X_val, y_val)
+        del X_train, y_train, X_val, y_val
         
         if len(train_dataset) % batch_size == 1:
             train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, drop_last=True) ## prevent error for batchnorm
         else:
             train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = torch.utils.data.DataLoader(dataset=val_dataset, shuffle=False)
         
         optimizer.zero_grad(); optimizer.step()
         
@@ -86,6 +145,22 @@ class supmodel(torch.nn.Module):
                     scheduler.step()
                 
                 pbar.set_postfix_str(f'data_id: {self.data_id}, Model: {self.modelname}, Tr loss: {loss:.5f}')
+            
+            # validation loop
+            self.model.eval()
+            val_loss = 0.0
+            with torch.no_grad():
+                for x_val, y_val in val_loader:
+                    out = self.model(x_val.to(self.device), self.cat_features)
+                    if out.size() != y_val.size():
+                        out = out.view(y_val.size())
+                    val_loss += loss_fn(out, y_val.to(self.device)).item()
+            val_loss /= len(val_loader)
+            
+            self._callback_container.on_epoch_end(epoch, {"val_loss": val_loss, "epoch": epoch})
+            if any([cb.should_stop for cb in self._callback_container.callbacks]):
+                print(f"Early stopping at epoch {epoch}")
+                break
                 
         self.model.eval()
     

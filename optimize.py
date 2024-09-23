@@ -17,10 +17,10 @@ parser = argparse.ArgumentParser()
 
 # Add arguments to the parser for GPU ID, OpenML dataset ID, code directory, model name, preprocessing method, and categorical feature threshold
 parser.add_argument("--gpu_id", type=int, default=4, help="gpu index")
-parser.add_argument("--openml_id", type=int, default=999999, help="dataset index (See dataset_id.json for detailed information)")
+parser.add_argument("--openml_id", type=int, default=4538, help="dataset index (See dataset_id.json for detailed information)") #multiclass: 4538, binclass: 45062, regression: 44062
 parser.add_argument("--seed", type=int, default=1, help="seed for dataset split (cross-validation)")
-parser.add_argument("--modelname", type=str, default='xgboost', 
-                    choices=['lr', 'randomforest', 'xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer', 'tabpfn'])
+parser.add_argument("--modelname", type=str, default='ftt', 
+                    choices=['randomforest', 'xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer', 'saint']) #lr, tabpfn not here -- only in reproduce.py
 parser.add_argument("--preprocessing", type=str, default="quantile", 
                     choices=['standardization', 'quantile'], help="numerical feature preprocessing method")
 parser.add_argument("--cat_threshold", type=int, default=0, help="categorical feature definition")
@@ -30,7 +30,7 @@ parser.add_argument("--savepath", type=str, default="results", help="path to sav
 args = parser.parse_args()
 
 # Ensure that XGBoost and MLP have no special module for categorical features
-if args.modelname in ['xgboost', 'mlp']:
+if args.modelname in ['lr', 'xgboost', 'mlp']:
     assert args.cat_threshold == 0
  
 # Load dataset information from a JSON file
@@ -116,9 +116,16 @@ if train:
         else:
             return val_metrics["acc_val"]
 
+    def stop_when_reached_optimal(study, trial):
+        if study.best_value >= 1.0:
+            study.stop()
+    
     # Run optimization with 100 trials without exception
     study = optuna.create_study(direction='minimize') if tasktype == "regression" else optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=100)
+    if tasktype == "regression":
+        study.optimize(objective, n_trials=100)
+    else:
+        study.optimize(objective, n_trials=100, callbacks=[stop_when_reached_optimal])
     
     # Save optimization history
     print("#############################################")
