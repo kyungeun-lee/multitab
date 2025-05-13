@@ -21,7 +21,7 @@ class Tokenizer(torch.nn.Module):
             self.category_offsets = None
             self.category_embeddings = None
         else:
-            categories = categories.detach().numpy().tolist()
+#             categories = categories.detach().numpy().tolist()
             d_bias = d_numerical + len(categories)
             category_offsets = torch.tensor([0] + categories[:-1]).cumsum(0)
             self.register_buffer('category_offsets', category_offsets)
@@ -44,6 +44,7 @@ class Tokenizer(torch.nn.Module):
             0 if self.category_offsets == None else len(self.category_offsets))
 
     def forward(self, x_num, x_cat):
+        # import IPython; IPython.embed()
         x_some = x_num if x_cat == None else x_cat
         assert x_some != None
         x_num = torch.cat(
@@ -52,7 +53,8 @@ class Tokenizer(torch.nn.Module):
             dim=1,
         )
         x = self.weight[None] * x_num[:, :, None]
-        
+
+        # import IPython; IPython.embed()
         if x_cat != None:
             emb = x_cat + self.category_offsets[None]
             x = torch.cat(
@@ -66,7 +68,7 @@ class Tokenizer(torch.nn.Module):
                     self.bias,
                 ]
             )
-            x = x + bias[None]
+            x = x + bias[None]        
         return x
 
 
@@ -258,6 +260,7 @@ class Transformer(torch.nn.Module):
         x_cat = x_all[:, self.x_cat] if len(self.x_cat) > 0 else None
 
         x = self.tokenizer(x_num, x_cat)
+        # print(x.size(), x_num.size(), x_cat.size())
 
         for layer_idx, layer in enumerate(self.layers):
             is_last_layer = layer_idx + 1 == len(self.layers)
@@ -325,7 +328,7 @@ class FTTransformer(supmodel):
         self.model = build_ftt(params, num_cols, categories, input_dim, output_dim, device)
         self.model = self.model.to(device)
     
-    def fit(self, X_train, y_train):
+    def fit(self, X_train, y_train, X_val, y_val):
         
         if y_train.ndim == 2:
             X_train = X_train[~torch.isnan(y_train[:, 0])]
@@ -333,14 +336,6 @@ class FTTransformer(supmodel):
         else:
             X_train = X_train[~torch.isnan(y_train)]
             y_train = y_train[~torch.isnan(y_train)]
-        
-        ### if we use early stopping!
-        n_samples = len(X_train)
-        train_idx = np.random.choice(n_samples, int(0.9*n_samples), replace=False)
-        X_val = X_train[~train_idx]
-        y_val = y_train[~train_idx]
-        X_train = X_train[train_idx]
-        y_train = y_train[train_idx]
         
         if y_train.ndim == 1:
             y_train = y_train.unsqueeze(1)

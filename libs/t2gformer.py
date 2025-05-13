@@ -312,6 +312,7 @@ class t2gformer(torch.nn.Module):
         
         fr_graphs = [] # FR-Graph of each layer
         x = self.tokenizer(x_num, x_cat)
+        # import IPython; IPython.embed()
 
         for layer_idx, layer in enumerate(self.layers):
             is_last_layer = layer_idx + 1 == len(self.layers)
@@ -403,7 +404,7 @@ class T2GFormer(supmodel):
         self.model = build_t2g(params, num_cols, cat_features, input_dim, output_dim, device)
         self.model = self.model.to(device)
         
-    def fit(self, X_train, y_train):
+    def fit(self, X_train, y_train, X_val, y_val):
         
         if y_train.ndim == 2:
             X_train = X_train[~torch.isnan(y_train[:, 0])]
@@ -411,14 +412,6 @@ class T2GFormer(supmodel):
         else:
             X_train = X_train[~torch.isnan(y_train)]
             y_train = y_train[~torch.isnan(y_train)]
-            
-        ### if we use early stopping!
-        n_samples = len(X_train)
-        train_idx = np.random.choice(n_samples, int(0.9*n_samples), replace=False)
-        X_val = X_train[~train_idx]
-        y_val = y_train[~train_idx]
-        X_train = X_train[train_idx]
-        y_train = y_train[train_idx]
             
         if y_train.ndim == 1:
             y_train = y_train.unsqueeze(1)

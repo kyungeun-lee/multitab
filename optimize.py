@@ -12,31 +12,27 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
+os.chdir("/home/multitab")
 # Initialize argument parser
 parser = argparse.ArgumentParser()
 
 # Add arguments to the parser for GPU ID, OpenML dataset ID, code directory, model name, preprocessing method, and categorical feature threshold
 parser.add_argument("--gpu_id", type=int, default=4, help="gpu index")
-parser.add_argument("--openml_id", type=int, default=4538, help="dataset index (See dataset_id.json for detailed information)") #multiclass: 4538, binclass: 45062, regression: 44062
+parser.add_argument("--openml_id", type=int, default=40672, help="dataset index (See dataset_id.json for detailed information)")
 parser.add_argument("--seed", type=int, default=1, help="seed for dataset split (cross-validation)")
-parser.add_argument("--modelname", type=str, default='ftt', 
-                    choices=['randomforest', 'xgboost', 'catboost', 'lightgbm', 'mlp', 'ftt', 'resnet', 't2gformer', 'saint']) #lr, tabpfn not here -- only in reproduce.py
-parser.add_argument("--preprocessing", type=str, default="quantile", 
-                    choices=['standardization', 'quantile'], help="numerical feature preprocessing method")
-parser.add_argument("--cat_threshold", type=int, default=0, help="categorical feature definition")
-parser.add_argument("--savepath", type=str, default="results", help="path to save the results")
+parser.add_argument("--modelname", type=str, default="resnet", 
+                    choices=['randomforest', 'xgboost', 'catboost', 'lightgbm', 'mlp', 'embedmlp', 'mlpplr', 'ftt', 'resnet', 't2gformer', 'saint', 'modernnca', 'tabr']) #lr, tabpfn not here -- only in reproduce.py
+parser.add_argument("--savepath", type=str, default=".", help="path to save the results")
 
 # Parse the arguments
 args = parser.parse_args()
 
-# Ensure that XGBoost and MLP have no special module for categorical features
-if args.modelname in ['lr', 'xgboost', 'mlp']:
-    assert args.cat_threshold == 0
- 
+os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 # Load dataset information from a JSON file
 with open(f'dataset_id.json', 'r') as file:
     data_info = json.load(file)
 tasktype = data_info.get(str(args.openml_id))['tasktype']
+print(tasktype)
 
 # Define directory for saving logs and create it if it does not exist
 if not args.savepath.endswith("optim_logs"):
@@ -45,42 +41,41 @@ else:
     savepath = args.savepath
 if not os.path.exists(savepath):
     os.makedirs(savepath)
-fname = os.path.join(savepath, f'data={args.openml_id}..model={args.modelname}..numprep={args.preprocessing}..catprep={args.cat_threshold}.pkl')
+fname = os.path.join(savepath, f'data={args.openml_id}..model={args.modelname}.pkl')
     
 # Prevent duplicated running by checking if the logs exist
 train = True
-print(fname)
 if os.path.exists(fname):
-    done_result = joblib.load(fname)
-    print("Already done!", done_result.best_trial.user_attrs)
-    train = False
-    
+    study = joblib.load(fname)
+    train = is_study_todo(study, tasktype)
+else:
+    study = optuna.create_study(direction='minimize') if tasktype == "regression" else optuna.create_study(direction='maximize')
+    initial_trial = suggest_initial_trial(args.modelname)
+    study.enqueue_trial(initial_trial)
+    train = check_if_fname_exists_in_error(fname)
+
+completed_trials_count = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
+remaining_trials = max(0, 100 - completed_trials_count)
+
 # Main part starts here:
 if train:
-    # Set GPU environment variables
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
-    os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+    # Set GPU environment variable
+    torch.cuda.set_device(args.gpu_id)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     env_info = '{0}:{1}'.format(os.uname().nodename, args.gpu_id)
+    print(env_info, device)
     
-    # Load dataset with specified preprocessing
-    quantile = bool(args.preprocessing == "quantile")
-    dataset = TabularDataset(args.openml_id, tasktype, device=device, seed=args.seed, cat_threshold=args.cat_threshold, modelname=args.modelname, quantile=quantile)
+    # Load dataset
+    dataset = TabularDataset(args.openml_id, tasktype, device=device, seed=args.seed)
     
     # Split dataset into training, validation, and test sets
     (X_train, y_train), (X_val, y_val), (X_test, y_test) = dataset._indv_dataset()
-    y_std = dataset.y_std.item() if tasktype == "regression" else None
-    
-    # Check for class imbalance problems in multiclass tasks with specific models
-    if (tasktype == "multiclass") & (args.modelname in ["catboost", "xgboost", "lightgbm"]):
-        if y_train.size(1) != y_train.unique(dim=1).size(1):            
-            raise ValueError # "Unknown class problem" --- Inherent challenges in GBDTs
+    y_std = dataset.y_std
     
     # Define optimization trials
     def objective(trial):
         print("### Start: ", trial.datetime_start.strftime("%m/%d %H:%M:%S"))
-        params = get_search_space(trial, args.modelname)    
+        params = get_search_space(trial, args.modelname, num_features=X_train.size(1), data_id=args.openml_id)
         
         output_dim = y_train.shape[1] if tasktype == "multiclass" else 1
         model = getmodel(args.modelname, params, tasktype, dataset, args.openml_id, X_train.shape[1], output_dim, device)
@@ -91,7 +86,7 @@ if train:
             probs_val, probs_test = None, None
         else:
             probs_val = model.predict_proba(X_val); probs_test = model.predict_proba(X_test)
-        
+
         if tasktype == "regression":
             val_metrics = calculate_metric(y_val*y_std, preds_val*y_std, probs_val, tasktype, 'val')
             test_metrics = calculate_metric(y_test*y_std, preds_test*y_std, probs_test, tasktype, 'test')
@@ -109,7 +104,9 @@ if train:
         now = datetime.datetime.now()
         duration = now - trial.datetime_start
         print(f'### Optimization time for trial {trial.number}: {duration.total_seconds():.0f} secs')
-
+        
+        trial.set_user_attr('training_time', duration.total_seconds())
+        
         # Optimization objectives: RMSE(val) for regression tasks, Accuracy(val) for classification tasks
         if tasktype == "regression":
             return val_metrics["rmse_val"]
@@ -119,20 +116,21 @@ if train:
     def stop_when_reached_optimal(study, trial):
         if study.best_value >= 1.0:
             study.stop()
-    
-    # Run optimization with 100 trials without exception
-    study = optuna.create_study(direction='minimize') if tasktype == "regression" else optuna.create_study(direction='maximize')
+
     if tasktype == "regression":
-        study.optimize(objective, n_trials=100)
+        study.optimize(objective, n_trials=remaining_trials, callbacks=[lambda study, trial: joblib.dump(study, fname)])
     else:
-        study.optimize(objective, n_trials=100, callbacks=[stop_when_reached_optimal])
+        study.optimize(objective, n_trials=remaining_trials, callbacks=[stop_when_reached_optimal, lambda study, trial: joblib.dump(study, fname)])
+    
+    total_training_time = sum([trial.user_attrs['training_time'] for trial in study.trials])
+    study.set_user_attr('total_training_time', total_training_time)
     
     # Save optimization history
     print("#############################################")
     print(env_info)
     print(study.best_trial.user_attrs)
+    df = study.trials_dataframe()
+    df.to_csv(os.path.join(savepath, f'data={args.openml_id}..model={args.modelname}.csv'), index=False)
     joblib.dump(study, fname)
     print(fname)
-    print("#############################################")
-    
-#     save_fig(study, savepath) ### only for convenience
+    print("#######################################")

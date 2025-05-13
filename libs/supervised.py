@@ -91,7 +91,7 @@ class supmodel(torch.nn.Module):
         #reference: TabZilla
         self._callback_container = CallbackContainer([EarlyStopping(
             early_stopping_metric="val_loss",
-            patience=20,
+            patience=params["early_stopping_rounds"],
         )])
     
     def fit(self, X_train, y_train, X_val, y_val):
@@ -114,7 +114,7 @@ class supmodel(torch.nn.Module):
             train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, drop_last=True) ## prevent error for batchnorm
         else:
             train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-        val_loader = torch.utils.data.DataLoader(dataset=val_dataset, shuffle=False)
+        val_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=False)
         
         optimizer.zero_grad(); optimizer.step()
         
@@ -147,6 +147,7 @@ class supmodel(torch.nn.Module):
                 pbar.set_postfix_str(f'data_id: {self.data_id}, Model: {self.modelname}, Tr loss: {loss:.5f}')
             
             # validation loop
+            # import pdb; pdb.set_trace();
             self.model.eval()
             val_loss = 0.0
             with torch.no_grad():
@@ -170,12 +171,15 @@ class supmodel(torch.nn.Module):
                 logits = []
                 iters = X_test.shape[0] // 100 + 1
                 for i in range(iters):
-                    pred = self.model(X_test[100*i:100*(i+1)], cat_features)
-                    logits.append(pred)
-                    del pred
+                    inputs = X_test[100*i:100*(i+1)]
+                    if inputs.size(0) > 0:
+                        pred = self.model(inputs, cat_features)
+                        logits.append(pred)
+                        del pred
                 logits = torch.concatenate(logits, dim=0)
             else:
                 logits = self.model(X_test, cat_features)
+
             if self.tasktype == "binclass":
                 return torch.sigmoid(logits).round().detach().cpu().numpy()
             elif self.tasktype == "regression":
@@ -189,13 +193,15 @@ class supmodel(torch.nn.Module):
                 logits = []
                 iters = X_test.shape[0] // 100 + 1
                 for i in range(iters):
-                    pred = self.model(X_test[100*i:100*(i+1)], cat_features)
-                    logits.append(pred)
-                    del pred
+                    inputs = X_test[100*i:100*(i+1)]
+                    if inputs.size(0) > 0:
+                        pred = self.model(inputs, cat_features)
+                        logits.append(pred)
+                        del pred
                 logits = torch.concatenate(logits, dim=0)
             else:
                 logits = self.model(X_test, cat_features)
-                
+
             if logit:
                 return logits.detach().cpu().numpy()
             else:
@@ -217,7 +223,7 @@ class CosineAnnealingLR_Warmup(object):
         self.warmup_iter = self.iter_per_epoch * self.warmup_epochs
         self.cosine_iter = self.iter_per_epoch * (self.T_max - self.warmup_epochs)
         self.current_iter = (self.last_epoch + 1) * self.iter_per_epoch
-
+        
         self.step()
 
     def get_current_lr(self):

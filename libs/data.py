@@ -1,11 +1,11 @@
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 from sklearn.preprocessing import LabelEncoder
 import openml, torch
 import numpy as np
 import pandas as pd
 import sklearn.datasets
 import scipy.stats
-from sklearn.preprocessing import QuantileTransformer
+from sklearn.preprocessing import QuantileTransformer, StandardScaler
 
 def get_batch_size(n): 
     ### n = train data size
@@ -25,6 +25,8 @@ def load_data(openml_id):
         dataset = sklearn.datasets.fetch_california_housing()
         X = pd.DataFrame(dataset['data'])
         y = pd.DataFrame(dataset['target'])
+        categorical_indicator = []
+        attribute_names = X.columns.tolist()
     elif openml_id == 43611:
         dataset = openml.datasets.get_dataset(openml_id)
         print(f'Dataset is loaded.. Data name: {dataset.name}, Target feature: class')
@@ -41,33 +43,52 @@ def load_data(openml_id):
     if openml_id == 537:
         y = y / 10000
         
-    print("RAW", X.shape)
+    # print("RAW", X.shape)
     nan_counts = X.isna().values.sum()
     cell_counts = X.shape[0] * X.shape[1]
     n_samples = X.shape[0]
     n_cols = X.shape[1]
-    print(nan_counts / cell_counts)
+    # print(nan_counts / cell_counts)
     ### Preprocess NaN (Section 3.2)
     # 1. Remove columns containing more than 50% NaN values
     nan_cols = X.isna().sum(0)
     valid_cols = nan_cols.loc[nan_cols < (0.5*len(X))].index.tolist()
+    total_features = len(valid_cols)
     X = X[valid_cols]
     # 2. Exclude samples containing any NaN values in either inputs or labels
     nan_idx = X.isna().any(axis=1)
     X = X[~nan_idx].reset_index(drop=True)
     y = y[~nan_idx].reset_index(drop=True)
     
-    # 3. Define categorical features
-    for col in X.select_dtypes(exclude=['float', 'int']).columns:
+    # 3. convert categorical features into integers (but still they are categorical)
+    cat_features = np.array(attribute_names)[categorical_indicator]
+    cat_features = [c for c in cat_features if c in valid_cols]
+    for v in valid_cols:
+        if not v in cat_features:
+            try:
+                X[v].astype(np.float32)
+            except ValueError:
+                valid_cols.remove(v)
+    X = X[valid_cols]
+
+    cat_cols = [valid_cols.index(x) for x in cat_features]
+    num_cols = [valid_cols.index(x) for x in valid_cols if not x in cat_features]
+    cat_cardinality = [X[c].cat.categories.size for c in cat_features]
+    for col in cat_features:
         colencoder = LabelEncoder()
         X[col] = colencoder.fit_transform(X[col])
-    
+    X = X.values
+    for col in num_cols:
+        if X[:, col].dtype == np.object_:
+            X[:, col] = X[:, col].astype(np.float32)
+
     y = y.values
-    if isinstance(y[0], str):
+    if isinstance(y[0], str) or isinstance(y[0], (bool, np.bool_)):
         labelencoder = LabelEncoder()
         y = labelencoder.fit_transform(y)
-    
-    return X.values, y
+
+    print("full data size", X.shape)
+    return X, y, cat_cols, cat_cardinality, num_cols
 
 def one_hot(y):
     num_classes = len(np.unique(y))
@@ -76,92 +97,60 @@ def one_hot(y):
     y_ = enc.fit_transform(y - min_class)
     return np.eye(num_classes)[y_]
 
-def split_data(X, y, tasktype, seed=123456, device='cuda'):
+def split_data(X, y, tasktype, num_indices=[], seed=0, device='cuda'):
     
     if tasktype == "multiclass":
         y = one_hot(y)
     
-    X_train, X_val, y_train, y_val = train_test_split(X, y, train_size=0.8, random_state=seed)
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, train_size=0.5, random_state=seed)
+    kf = KFold(n_splits=10, shuffle=True, random_state=42)
+    fold_idx = list(kf.split(X))
+    tr_idx, te_idx = fold_idx[seed]
+    val_split_idx = (seed+1) % 10
+    _, val_idx = fold_idx[val_split_idx]
+    tr_idx = np.setdiff1d(tr_idx, val_idx)
+        
+    X_train = torch.from_numpy(X[tr_idx]).type(torch.float32).to(device)
+    X_val = torch.from_numpy(X[val_idx]).type(torch.float32).to(device)
+    X_test = torch.from_numpy(X[te_idx]).type(torch.float32).to(device)
+
+    y_train = torch.from_numpy(y[tr_idx]).type(torch.float32).to(device)
+    y_val = torch.from_numpy(y[val_idx]).type(torch.float32).to(device)
+    y_test = torch.from_numpy(y[te_idx]).type(torch.float32).to(device)
     
-    X_train = torch.from_numpy(X_train).type(torch.float32).to(device)
-    X_val = torch.from_numpy(X_val).type(torch.float32).to(device)
-    X_test = torch.from_numpy(X_test).type(torch.float32).to(device)
-
-    y_train = torch.from_numpy(y_train).type(torch.float32).to(device)
-    y_val = torch.from_numpy(y_val).type(torch.float32).to(device)
-    y_test = torch.from_numpy(y_test).type(torch.float32).to(device)
+    (X_train, y_train), (X_val, y_val), (X_test, y_test), y_std = prep_data(X_train, X_val, X_test, y_train, y_val, y_test, num_indices=num_indices, tasktype=tasktype)
     
-    return (X_train, y_train), (X_val, y_val), (X_test, y_test)
+    return (X_train, y_train), (X_val, y_val), (X_test, y_test), y_std
 
-def cat_num_features(X_train, cat_threshold=20):
-    num_features = X_train.shape[1]
-    
-    counts = torch.tensor([X_train[:, i].unique().numel() for i in range(num_features)])
-    if cat_threshold == None:
-        X_cat = []
-        X_num = np.arange(num_features)
-    else:
-        X_cat = np.where(counts <= cat_threshold)[0].astype(int)
-        X_num = np.array([int(i) for i in range(num_features) if not i in X_cat])
-    return (X_cat, counts[X_cat], X_num)
-
-# Numerical feature preprocessing: Standardization
-def standardization(X, X_mean, X_std, y, y_mean=0, y_std=1, num_indices=[], tasktype='multiclass'):
-    X[:, num_indices] = (X[:, num_indices] - X_mean[num_indices]) / (X_std[num_indices] + 1e-10)
-    if tasktype == "regression":
-        y = (y - y_mean) / (y_std + 1e-10)
-    return (X, y)
-
-# Numerical feature preprocessing: Quantile transform
-def quant(X_train, X_val, X_test, y_train, y_val, y_test, y_mean=0, y_std=1, num_indices=[], tasktype='multiclass'):
+## following Gorishniy et al., 2021
+def prep_data(X_train, X_val, X_test, y_train, y_val, y_test, num_indices=[], tasktype='multiclass'):
     device = X_train.get_device()
-    quantile_transformer = QuantileTransformer(output_distribution='uniform', random_state=42)
-    X_train[:, num_indices] = torch.tensor(quantile_transformer.fit_transform(X_train[:, num_indices].cpu().numpy()), device=device)
-    X_val[:, num_indices] = torch.tensor(quantile_transformer.transform(X_val[:, num_indices].cpu().numpy()), device=device)
-    X_test[:, num_indices] = torch.tensor(quantile_transformer.transform(X_test[:, num_indices].cpu().numpy()), device=device)
+    if len(num_indices) > 0:
+        quantile_transformer = QuantileTransformer(output_distribution='uniform', random_state=42)
+        X_train[:, num_indices] = torch.tensor(quantile_transformer.fit_transform(X_train[:, num_indices].cpu().numpy()), device=device)
+        X_val[:, num_indices] = torch.tensor(quantile_transformer.transform(X_val[:, num_indices].cpu().numpy()), device=device)
+        X_test[:, num_indices] = torch.tensor(quantile_transformer.transform(X_test[:, num_indices].cpu().numpy()), device=device)
     if tasktype == "regression":
-        y_train = (y_train - y_mean) / (y_std + 1e-10)
-        y_val = (y_val - y_mean) / (y_std + 1e-10)
-        y_test = (y_test - y_mean) / (y_std + 1e-10)
-    return (X_train, y_train), (X_val, y_val), (X_test, y_test)
+        standard_transformer = StandardScaler()
+        y_train = torch.tensor(standard_transformer.fit_transform(y_train.reshape(-1, 1).cpu().numpy()).reshape(-1), device=device)
+        y_std = standard_transformer.scale_.item()
+        y_val = torch.tensor(standard_transformer.transform(y_val.reshape(-1, 1).cpu().numpy()).reshape(-1), device=device)
+        y_test = torch.tensor(standard_transformer.transform(y_test.reshape(-1, 1).cpu().numpy()).reshape(-1), device=device)
+    else:
+        y_std = 1.
+    return (X_train, y_train), (X_val, y_val), (X_test, y_test), y_std
 
 
 class TabularDataset(torch.utils.data.Dataset):
-    def __init__(self, openml_id, tasktype, device, 
-                 cat_threshold=1e+10, seed=123456, modelname="xgboost", normalize=True, quantile=False):
-        X, y = load_data(openml_id)
-            
+    def __init__(self, openml_id, tasktype, device, seed=1):
+        
+        X, y, self.X_cat, self.X_cat_cardinality, self.X_num = load_data(openml_id)
         self.tasktype = tasktype
         
-        (self.X_train, self.y_train), (self.X_val, self.y_val), (self.X_test, self.y_test) = split_data(X, y, self.tasktype, seed=seed)
-        (self.X_cat, self.X_categories, self.X_num) = cat_num_features(torch.tensor(X), cat_threshold=cat_threshold)
-        if modelname in ["ftt", "resnet", "t2gformer", "catboost", "lightgbm"]:
-            for cat_dim in self.X_cat:
-                unique_values = torch.cat([self.X_train[:, cat_dim].unique(), self.X_val[:, cat_dim].unique(), self.X_test[:, cat_dim].unique()]).unique() 
-                
-                mapping = {v.item(): idx for (idx, v) in enumerate(unique_values)}
-                self.X_train[:, cat_dim] = torch.tensor([mapping[v.item()] for v in self.X_train[:, cat_dim]])
-                self.X_val[:, cat_dim] = torch.tensor([mapping[v.item()] for v in self.X_val[:, cat_dim]])
-                self.X_test[:, cat_dim] = torch.tensor([mapping[v.item()] for v in self.X_test[:, cat_dim]])
+        (self.X_train, self.y_train), (self.X_val, self.y_val), (self.X_test, self.y_test), self.y_std = split_data(X, y, self.tasktype, num_indices=self.X_num, seed=seed, device=device)
         print("input dim: %i, cat: %i, num: %i" %(self.X_train.size(1), len(self.X_cat), len(self.X_num)))
         
         self.batch_size = get_batch_size(len(self.X_train))
-        self.X_mean = self.X_train.mean(0)
-        self.X_std = self.X_train.std(0)
-        self.y_mean = self.y_train.type(torch.float).mean(0)
-        self.y_std = self.y_train.type(torch.float).std(0)
-                
-        if quantile & (len(self.X_num) > 0) & normalize:
-            (self.X_train, self.y_train), (self.X_val, self.y_val), (self.X_test, self.y_test) = quant(
-                self.X_train, self.X_val, self.X_test,
-                self.y_train, self.y_val, self.y_test,
-                self.y_mean, self.y_std, num_indices=self.X_num, tasktype=self.tasktype)
-        elif (not quantile) & normalize:
-            (self.X_train, self.y_train) = standardization(self.X_train, self.X_mean, self.X_std, self.y_train, self.y_mean, self.y_std, num_indices=self.X_num, tasktype=self.tasktype)
-            (self.X_val, self.y_val) = standardization(self.X_val, self.X_mean, self.X_std, self.y_val, self.y_mean, self.y_std, num_indices=self.X_num, tasktype=self.tasktype)
-            (self.X_test, self.y_test) = standardization(self.X_test, self.X_mean, self.X_std, self.y_test, self.y_mean, self.y_std, num_indices=self.X_num, tasktype=self.tasktype)
-            
+        
     def __len__(self, data):
         if data == "train":
             return len(self.X_train)

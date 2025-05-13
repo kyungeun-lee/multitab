@@ -36,9 +36,12 @@ class resnet(torch.nn.Module):
         self.x_num = num_cols
             
         def make_normalization():
-            return {'batchnorm': torch.nn.BatchNorm1d, 'layernorm': torch.nn.LayerNorm}[
-                normalization
-            ](d)
+            if normalization is None:
+                return torch.nn.Identity()
+            else:
+                return {'batchnorm': torch.nn.BatchNorm1d, 'layernorm': torch.nn.LayerNorm}[
+                    normalization
+                ](d)
         
         if activation == "reglu":
             self.main_activation = reglu
@@ -62,7 +65,6 @@ class resnet(torch.nn.Module):
         d_hidden = int(d * d_hidden_factor)
 
         if len(categories) > 0:
-            categories = categories.detach().numpy().tolist()
             d_in += len(categories) * d_embedding
             category_offsets = torch.tensor([0] + categories[:-1]).cumsum(0)
             self.register_buffer('category_offsets', category_offsets)
@@ -100,7 +102,6 @@ class resnet(torch.nn.Module):
             x.append(self.category_embeddings(emb.to(torch.long)).view(x_cat.size(0), -1))
         x = torch.cat(x, dim=-1)
         
-#         import IPython; IPython.embed()
         x = self.first_layer(x)
         for layer in self.layers:
             layer = typing.cast(typing.Dict[str, torch.nn.Module], layer)
@@ -152,23 +153,8 @@ class ResNet(supmodel):
                                   params["optimizer"], params["learning_rate"], params["weight_decay"])
         self.model = self.model.to(device)
     
-    def fit(self, X_train, y_train):
-        
-        if y_train.ndim == 2:
-            X_train = X_train[~torch.isnan(y_train[:, 0])]
-            y_train = y_train[~torch.isnan(y_train[:, 0])]
-        else:
-            X_train = X_train[~torch.isnan(y_train)]
-            y_train = y_train[~torch.isnan(y_train)]
-        
-        ### if we use early stopping!
-        n_samples = len(X_train)
-        train_idx = np.random.choice(n_samples, int(0.9*n_samples), replace=False)
-        X_val = X_train[~train_idx]
-        y_val = y_train[~train_idx]
-        X_train = X_train[train_idx]
-        y_train = y_train[train_idx]
-            
+    def fit(self, X_train, y_train, X_val, y_val):
+                    
         if y_train.ndim == 1:
             y_train = y_train.unsqueeze(1)
             y_val = y_val.unsqueeze(1)
