@@ -110,9 +110,6 @@ Here we provide simple examples step by step.
     python ensemble.py
     ```
 
-### License
-Apache-2.0 license
-
 ### Contact
 Kyungeun Lee (e-mail: kyungeun.lee@lgresearch.ai)
 
